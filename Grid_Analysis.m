@@ -1,22 +1,18 @@
 clc
-clear all
-
+clearvars
 
 %% Load the file
 
-[FileName,PathName]=uigetfile
+[FileName,PathName]=uigetfile; %Opens a file selection box
 TraceFile = strcat(PathName,FileName);
-cd(PathName)
-load(FileName)
-ExptID = strsplit(FileName,'.');
+cd(PathName) %Change the working directory to the path
+load(FileName) %Load the file
+ExptID = strsplit(FileName,'.');%Extract the filename ignoring the extension
 ExptID = ExptID(1);
-
-
 ExptID = ExptID{1};
 
-
-gridSize = input('How large is the Grid?');
 acqRate = 20; % 20 datapoints per ms
+gridSize = input('How large is the Grid?'); %Ask the user to enter the grid size
 
 %% Create Traces and Separate out Triggered Responses
 
@@ -32,7 +28,7 @@ TimeTrace = linspace(0,length(PatchTrace)/(1000*acqRate),length(PatchTrace));
 maxPolygon = max(PolygonTrace);
 
 % Locations of the TTLs in channel 2 i.e. Polygon
-[peaks locs] = findpeaks(PolygonTrace,'MinPeakHeight',0.95*maxPolygon,'MinPeakDistance',18000,'Npeaks',gridSize^2);
+[peaks, locs] = findpeaks(PolygonTrace,'MinPeakHeight',0.95*maxPolygon,'MinPeakDistance',18000,'Npeaks',gridSize^2);
 
 % Set the time in ms around the stim onset for plotting 
 pre = 25; 
@@ -46,7 +42,7 @@ PatchTracelets=zeros(length(locs),points);
 %Fill in the matrix using locations of TTL peaks
 for i=1:length(locs)
     PatchTracelets(i,:)=PatchTrace((locs(i)-pre*acqRate):(locs(i)+post*acqRate));
-    %baseline subtraction
+    % Baseline subtraction
     % A mean value is calculated between datapoints 100 and 400
     % this mean is then subtracted from the entire traceline
     % thus shifting the trace to zero.
@@ -62,9 +58,11 @@ gridPeak=zeros(gridSize);
 
 for i=1:length(locs)
     gridPeak(i)=max(PatchTracelets(i,:));
-%     if gridPeak(i) > 120
-%         gridPeak(i)=120
-%     end
+    % Clip any response that grows above 30 mV so that
+    % the resolution of heat map can be improved
+    if gridPeak(i) > 30
+        gridPeak(i)=30;
+    end
 end
 gridPeak = gridPeak';
  
@@ -73,19 +71,27 @@ gridPeak = gridPeak';
 
 gridAuc=zeros(gridSize);
 aucTime = post; % Time till which AUC is calculated
-aucDuration = [pre*acqRate:pre*acqRate+aucTime*acqRate];
+aucDuration = pre*acqRate:pre*acqRate+aucTime*acqRate;
 
 for i=1:length(locs)
     gridAuc(i)=trapz(PatchTracelets(i,aucDuration));
 end
 gridAuc = gridAuc';
 
+
+%% Save data file
+mkdir(ExptID)
+AnalysedFilePath = strcat(PathName,ExptID,'\');
+cd(AnalysedFilePath) %Change the working directory to the path
+AnalysedFile = strcat(AnalysedFilePath,ExptID,'_Ordered_Grid_',num2str(gridSize),'.mat');
+save(AnalysedFile)
+
 %% Generate and save the peak figure
 
 figure
 gridPeakMap = imagesc(gridPeak);
 colormap('default')
-h = colorbar()
+h = colorbar();
 title('Peak Response from baseline(Spikes clipped at 30)')
 PeakImageFile = strcat(ExptID,'_gridPeakMap_',num2str(gridSize),'x');
 print(PeakImageFile,'-dpng')
@@ -95,24 +101,8 @@ print(PeakImageFile,'-dpng')
 figure
 gridAucMap = imagesc(gridAuc);
 colormap('default')
-h = colorbar()
+h = colorbar();
 title('Area Under the Curve for Responses')
 AucImageFile = strcat(ExptID,'_gridAucMap_',num2str(gridSize),'x');
 print(AucImageFile,'-dpng')
-
-%% Clear all junk variables
-clear i
-clear maxPolygon
-clear pre
-clear post
-clear points
-clear acqRate
-clear baseline
-
-
-%% Save data file
-mkdir(ExptID)
-AnalysedFilePath = strcat(PathName,ExptID,'\');
-AnalysedFile = strcat(AnalysedFilePath,ExptID,'_Ordered_Grid_',num2str(gridSize),'.mat');
-save(AnalysedFile)
 
